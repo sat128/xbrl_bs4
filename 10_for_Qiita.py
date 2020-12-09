@@ -1,4 +1,3 @@
-
 from bs4 import BeautifulSoup
 import re
 import pandas as pd
@@ -6,8 +5,9 @@ import os
 import glob
 import numpy as np
 
-
-path_base = '//192.168.10.24/raid_hdd/edinet_test/xbrl/'
+# パスの指定
+path_base = '****'
+path_taxonomy_labels = '****/taxonomy_labels_05122254.tsv'
 
 
 def get_keys(arg_filename):
@@ -200,7 +200,7 @@ def get_label_local(arg_docid):
 
 
 def get_labeled_df(arg_fs, arg_label_local):
-    df_label_global = pd.read_table('//192.168.10.24/raid_hdd/edinet/taxonomy/taxonomy_labels_05122254.tsv', sep='\t', encoding='utf-8')
+    df_label_global = pd.read_table(path_taxonomy_labels, sep='\t', encoding='utf-8')
 
     # グローバルラベルの処理
     # グローバルラベルデータのうち、必要行に絞る
@@ -239,10 +239,7 @@ def get_labeled_df(arg_fs, arg_label_local):
     arg_fs['temp_label'] = arg_fs['account_item'].str.replace('jpcrp\d{6}-asr_E\d{5}-\d{3}:', '')
     arg_fs['temp_label'] = arg_fs['temp_label'].str.replace('jppfs_cor:', '')
 
-
-
     df_labeled_fs = pd.merge(arg_fs, df_label_merged, left_on='temp_label', right_on='xlink_label', how='left').drop_duplicates()
-
 
     return df_labeled_fs
 
