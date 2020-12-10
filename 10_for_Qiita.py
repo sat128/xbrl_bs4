@@ -6,8 +6,8 @@ import glob
 import numpy as np
 
 # パスの指定
-path_base = '****'
-path_taxonomy_labels = '****/taxonomy_labels_05122254.tsv'
+path_base = '****' # baseとなるディレクトリの指定。個々のdocidが付されたフォルダが格納された階層を指定することを想定しています。
+path_taxonomy_labels = '****/taxonomy_labels_05122254.tsv' # Gitに乗せたtsvファイルをローカルに保存して当該パスを指定してください。
 
 
 def get_keys(arg_filename):
