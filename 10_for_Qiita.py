@@ -1,13 +1,17 @@
-from bs4 import BeautifulSoup
-import re
-import pandas as pd
 import os
+import re
 import glob
+
+import pandas as pd
 import numpy as np
+from bs4 import BeautifulSoup
 
 # パスの指定
 path_base = '****' # baseとなるディレクトリの指定。個々のdocidが付されたフォルダが格納された階層を指定することを想定しています。
-path_taxonomy_labels = '****/taxonomy_labels_05122254.tsv' # Gitに乗せたtsvファイルをローカルに保存して当該パスを指定してください。
+if path_base[-1] != '/':
+    path_base = path_base + '/'
+
+path_taxonomy_labels = '****/taxonomy_labels_05122254.tsv' # Gitに乗せたtsvファイルを独自に保存して当該パスを指定してください。
 
 
 def get_keys(arg_filename):
@@ -76,11 +80,15 @@ def get_dei(arg_docid):
     # 横持ちのデータフレームに変換
     df_dei = pd.DataFrame(pd.Series(dict_dei)).T
 
+    # DEIに含まれる情報のうち、EDINETコードと会社名に絞る
+    df_dei = df_dei[['jpdei_cor:EDINETCodeDEI', 'jpdei_cor:FilerNameInJapaneseDEI', 'jpdei_cor:AccountingStandardsDEI', 'jpdei_cor:DocumentTypeDEI']]
+    df_dei = df_dei.rename(columns={'jpdei_cor:EDINETCodeDEI': 'edinetCode', 'jpdei_cor:FilerNameInJapaneseDEI': 'companyName', 'jpdei_cor:AccountingStandardsDEI': 'GAAP', 'jpdei_cor:DocumentTypeDEI': 'DocType'})
+
     return df_dei
 
 
 # 財務諸表の要素タグからDFを返す関数。
-# 5.のサンプルコードからXBRLファイルの読み込みを省略
+# 5.のサンプルコードからXBRLファイルの読み込みを省略し、引数をタグに変更。
 def get_df(arg_tags):
     # 各fsの各要素を格納した辞書を入れるカラのリスト作成
     list_fs = []
@@ -126,7 +134,9 @@ def get_fs(arg_path):
         dict_tag[tag.get('name')] = tag
 
     # 取得対象となりうる財務諸表の`name`一覧定義
-    list_target_fs = ['jpcrp_cor:ConsolidatedBalanceSheetTextBlock',
+    list_target_fs = [
+        # 有価証券報告書
+        'jpcrp_cor:ConsolidatedBalanceSheetTextBlock',
         'jpcrp_cor:ConsolidatedStatementOfIncomeTextBlock',
         'jpcrp_cor:ConsolidatedStatementOfComprehensiveIncomeTextBlock',
         'jpcrp_cor:ConsolidatedStatementOfChangesInEquityTextBlock',
@@ -135,8 +145,35 @@ def get_fs(arg_path):
         'jpcrp_cor:StatementOfIncomeTextBlock',
         #'jpcrp_cor:DetailedScheduleOfManufacturingCostTextBlock',#製造原価報告書を取得する場合はコメントアウトを外してください。
         'jpcrp_cor:StatementOfChangesInEquityTextBlock',
-        'jpcrp_cor:StatementOfCashFlowsTextBlock'
-    ]
+        'jpcrp_cor:StatementOfCashFlowsTextBlock',
+        # 半期報告書
+        'jpcrp_cor:SemiAnnualConsolidatedBalanceSheetTextBlock',
+        'jpcrp_cor:SemiAnnualConsolidatedStatementOfIncomeTextBlock',
+        'jpcrp_cor:SemiAnnualConsolidatedStatementOfComprehensiveIncomeTextBlock',
+        'jpcrp_cor:SemiAnnualConsolidatedStatementOfChangesInEquityTextBlock',
+        'jpcrp_cor:SemiAnnualConsolidatedStatementOfCashFlowsTextBlock',
+        'jpcrp_cor:SemiAnnualBalanceSheetTextBlock',
+        'jpcrp_cor:SemiAnnualStatementOfIncomeTextBlock',
+        #'jpcrp_cor:SemiAnnualDetailedScheduleOfManufacturingCostTextBlock',#製造原価報告書を取得する場合はコメントアウトを外してください。
+        'jpcrp_cor:SemiAnnualStatementOfChangesInEquityTextBlock',
+        'jpcrp_cor:SemiAnnualStatementOfCashFlowsTextBlock',
+        # 四半期報告書
+        'jpcrp_cor:QuarterlyConsolidatedBalanceSheetTextBlock',
+        'jpcrp_cor:QuarterlyConsolidatedStatementOfIncomeTextBlock',
+        'jpcrp_cor:QuarterlyConsolidatedStatementOfComprehensiveIncomeTextBlock',
+        'jpcrp_cor:QuarterlyConsolidatedStatementOfChangesInEquityTextBlock',
+        'jpcrp_cor:QuarterlyConsolidatedStatementOfCashFlowsTextBlock',
+        'jpcrp_cor:QuarterlyBalanceSheetTextBlock',
+        'jpcrp_cor:QuarterlyStatementOfIncomeTextBlock',
+        'jpcrp_cor:QuarterlyStatementOfChangesInEquityTextBlock',
+        'jpcrp_cor:QuarterlyStatementOfCashFlowsTextBlock',
+        'jpcrp_cor:YearToQuarterEndConsolidatedStatementOfIncomeTextBlock',
+        'jpcrp_cor:YearToQuarterEndConsolidatedStatementOfComprehensiveIncomeTextBlock',
+        'jpcrp_cor:YearToQuarterEndConsolidatedStatementOfCashFlowsTextBlock',
+        'jpcrp_cor:YearToQuarterEndStatementOfIncomeTextBlock',
+        'jpcrp_cor:YearToQuarterEndStatementOfComprehensiveIncomeTextBlock',
+        'jpcrp_cor:YearToQuarterEndStatementOfCashFlowsTextBlock'
+        ]
 
     # 各財務諸表を入れるカラのDFを作成
     list_fs = []
@@ -169,41 +206,47 @@ def get_fs(arg_path):
 
 
 def get_label_local(arg_docid):
-
+    # 引数のdocidからパスを生成
     path_local_label = glob.glob(path_base + arg_docid + '/XBRL/PublicDoc/*_lab.xml')
 
-    # labファイルの読み込み
-    with open(path_local_label[0], encoding='utf-8') as f:
-        soup = BeautifulSoup(f.read(), 'lxml')
+    # 標準ラベルのみ使用し、独自ラベルを持たない場合があるため、if分岐
+    if path_local_label:
+        # labファイルの読み込み
+        with open(path_local_label[0], encoding='utf-8') as f:
+            soup = BeautifulSoup(f.read(), 'lxml')
 
-    # link:labelタグのみ抽出
-    link_label = soup.find_all('link:label')
+        # link:labelタグのみ抽出
+        link_label = soup.find_all('link:label')
 
-    # ラベル情報用dictを格納するカラのリストを作成
-    list_label = []
+        # ラベル情報用dictを格納するカラのリストを作成
+        list_label = []
 
-    # ラベル情報をループ処理で取得
-    for each_label in link_label:
-        dict_label = {}
-        dict_label['id'] = each_label.get('id')
-        dict_label['xlink_label'] = each_label.get('xlink:label')
-        dict_label['xlink_role'] = each_label.get('xlink:role')
-        dict_label['xlink_type'] = each_label.get('xlink:type')
-        dict_label['xml_lang'] = each_label.get('xml:lang')
-        dict_label['label'] = each_label.text
-        list_label.append(dict_label)
+        # ラベル情報をループ処理で取得
+        for each_label in link_label:
+            dict_label = {}
+            dict_label['id'] = each_label.get('id')
+            dict_label['xlink_label'] = each_label.get('xlink:label')
+            dict_label['xlink_role'] = each_label.get('xlink:role')
+            dict_label['xlink_type'] = each_label.get('xlink:type')
+            dict_label['xml_lang'] = each_label.get('xml:lang')
+            dict_label['label'] = each_label.text
+            list_label.append(dict_label)
 
-    # ラベル情報取得結果をDFに    
-    df_label_local = pd.DataFrame(list_label)
+        # ラベル情報取得結果をDFに    
+        df_label_local = pd.DataFrame(list_label)
+
+    else:
+        df_label_local = pd.DataFrame(index=[])
 
     return df_label_local
 
 
 def get_labeled_df(arg_fs, arg_label_local):
+    # 標準ラベルの読み込み
     df_label_global = pd.read_table(path_taxonomy_labels, sep='\t', encoding='utf-8')
 
-    # グローバルラベルの処理
-    # グローバルラベルデータのうち、必要行に絞る
+    # 標準ラベルの処理
+    # 標準ラベルデータのうち、必要行に絞る
     df_label_global = df_label_global[df_label_global['xlink_role'] == 'http://www.xbrl.org/2003/role/label']
     # 必要列のみに絞る
     df_label_global = df_label_global[['xlink_label', 'label']]
@@ -212,90 +255,142 @@ def get_labeled_df(arg_fs, arg_label_local):
     # 同一ラベルで異なる表示名が存在する場合、独自の表示名を優先
     df_label_global['temp'] = 0
 
-    # ローカルラベルの処理
-    # ローカルラベルデータのうち、必要列に絞る
-    df_label_local = arg_label_local[['xlink_label', 'label']]
-    # ラベルの一番後ろに'_label.*'があり、FSと結合できないため、これを削除
-    df_label_local['xlink_label'] = df_label_local['xlink_label'].str.replace('_label.*$', '')
-    # ラベルの最初に'jpcrp'で始まるラベルがあり、削除で統一。
-    # 削除で統一した結果、各社で定義していた汎用的な科目名（「貸借対照表計上額」など）が重複するようになる。後続処理で重複削除。
-    df_label_local['xlink_label'] = df_label_local['xlink_label'].str.replace('jpcrp\d{6}-asr_E\d{5}-\d{3}_', '')
-    # ラベルの最初に'label_'で始まるラベルがあり、削除で統一
-    # 削除で統一した結果、各社で定義していた汎用的な科目名（「貸借対照表計上額」など）が重複するようになる。後続処理で重複削除。
-    df_label_local['xlink_label'] = df_label_local['xlink_label'].str.replace('label_', '')
-    # 同一ラベルで異なる表示名が存在する場合、独自の表示名を優先
-    df_label_local['temp'] = 1
-    
-    # label_globalとlabel_localを縦結合
-    df_label_merged = pd.concat([df_label_global, df_label_local])
-    # 同一ラベルで異なる表示名が存在する場合、独自の表示名を優先
+    # 標準ラベルのみ使用し、独自ラベルを持たない場合があるため、if分岐
+    if len(arg_label_local) > 0:
+        # 独自ラベルの処理
+        # 独自ラベルデータのうち、必要列に絞る
+        df_label_local = arg_label_local[['xlink_label', 'label']].copy()
+        # ラベルの末尾に'_label.*'があり、FSと結合できないため、これを削除
+        df_label_local['xlink_label'] = df_label_local['xlink_label'].str.replace('_label.*$', '').copy()
+        # ラベルの最初に'jpcrp'で始まるラベルがあり、削除で統一。
+        # 削除で統一した結果、各社で定義していた汎用的な科目名（「貸借対照表計上額」など）が重複するようになる。後続処理で重複削除。
+        df_label_local['xlink_label'] = df_label_local['xlink_label'].str.replace('jpcrp\d{6}-..._E\d{5}-\d{3}_', '')
+        # ラベルの最初に'label_'で始まるラベルがあり、削除で統一
+        # 削除で統一した結果、各社で定義していた汎用的な科目名（「貸借対照表計上額」など）が重複するようになる。後続処理で重複削除。
+        df_label_local['xlink_label'] = df_label_local['xlink_label'].str.replace('label_', '')
+        # 同一要素名で異なる表示名が存在する場合、独ラベルを優先
+        df_label_local['temp'] = 1
+        
+        # label_globalとlabel_localを縦結合
+        df_label_merged = pd.concat([df_label_global, df_label_local])
+    else:
+        df_label_merged = df_label_global
+
+    # 同一要素名で異なる表示名が存在する場合、独自ラベルを優先
     grp_df_label_merged = df_label_merged.groupby('xlink_label')
     df_label_merged = df_label_merged.loc[grp_df_label_merged['temp'].idxmax(),:]
     df_label_merged = df_label_merged.drop('temp', axis=1)
     
     # localラベルで重複してしまう行があるため、ここで重複行を削除
     df_label_merged = df_label_merged.drop_duplicates()
-    
-    arg_fs['temp_label'] = arg_fs['account_item'].str.replace('jpcrp\d{6}-asr_E\d{5}-\d{3}:', '')
+
+    # 結合用ラベル列作成
+    arg_fs['temp_label'] = arg_fs['account_item'].str.replace('jpcrp\d{6}-..._E\d{5}-\d{3}:', '')
     arg_fs['temp_label'] = arg_fs['temp_label'].str.replace('jppfs_cor:', '')
 
+    # ラベルの結合
     df_labeled_fs = pd.merge(arg_fs, df_label_merged, left_on='temp_label', right_on='xlink_label', how='left').drop_duplicates()
 
     return df_labeled_fs
 
 
 def make_tidy(arg_df):
+    # 連結財務諸表フラグの作成
     arg_df['consoli_flg'] = np.where(arg_df['contextRef'].str.contains('NonConsolidated'), 0, 1)
-
+    # 財務諸表区分コードの作成
     arg_df['fs'] = np.where(arg_df['fs_class'].str.contains('BalanceSheet'), 'bs', \
-        np.where(arg_df['fs_class'].str.contains('StatementOfIncome'), 'pl', \
-            np.where(arg_df['fs_class'].str.contains('StatementOfCashFlows'), 'cf', \
-                np.where(arg_df['fs_class'].str.contains('StatementOfChangesInEquity'), 'ss', \
+                    np.where(arg_df['fs_class'].str.contains('StatementOfIncome'), 'pl', \
+                    np.where(arg_df['fs_class'].str.contains('StatementOfCashFlows'), 'cf', \
+                    np.where(arg_df['fs_class'].str.contains('StatementOfChangesInEquity'), 'ss', \
                     np.where(arg_df['fs_class'].str.contains('StatementOfComprehensiveIncome'), 'ci', '')))))
-
-    df_tidy = arg_df[['docID', 'ordinance', 'formCode', 'reporting_id', 'sequence_n1', 'edinetCode', 'companyName', 'sequence_n2', 'periodend', 'report_his', 'submitdate', 'consoli_flg', 'fs', 'label', 'contextRef', 'amount']]
+    # 並び替え
+    df_tidy = arg_df[[
+        'docID', 
+        'ordinance', 
+        'formCode', 
+        'reporting_id', 
+        'sequence_n1', 
+        'DocType', 
+        'edinetCode', 
+        'companyName', 
+        'sequence_n2', 
+        'periodend', 
+        'report_his', 
+        'submitdate', 
+        'consoli_flg', 
+        'fs', 
+        'label', 
+        'contextRef', 
+        'amount'
+        ]]
 
     return df_tidy
 
 
 
 def get_df_fs(arg_docid):
-    # docidから経理の状況が含まれるXBRLファイルのリストを取得
-    list_0105 = glob.glob(path_base + arg_docid + '/XBRL/PublicDoc/0105**.htm')
-    # 経理の状況が含まれるリストから、各ファイルに対応するDFを作成し、リストに格納
-    list_df_fs = [get_fs(each_0105) for each_0105 in list_0105]
-    # 各ファイルごとのDFを縦結合する。
-    df_fs = pd.concat(list_df_fs)
-
-    # docidから独自ラベルを取得する。
-    df_label_local = get_label_local(arg_docid)
-    # 日本語ラベル付きDFを取得する。
-    df_labeled_fs = get_labeled_df(df_fs, df_label_local)
-
-    # ファイル名からキー情報の取得
-    df_filename_keys = get_keys(list_0105[0])
-    # 結合用のキー列追加
-    df_filename_keys['temp_key'] = 1
-    # 結合用のキー列追加
-    df_labeled_fs['temp_key'] = 1
-
-    # 会社名の取得
+    # DEI情報の取得
     df_dei = get_dei(arg_docid)
-    # 必要なカラムに絞り列名変更
-    df_dei = df_dei[['jpdei_cor:EDINETCodeDEI', 'jpdei_cor:FilerNameInJapaneseDEI']].rename(columns={'jpdei_cor:EDINETCodeDEI': 'edinetCode', 'jpdei_cor:FilerNameInJapaneseDEI': 'companyName'})
 
-    # ファイル名から作成したキー情報と結合
-    df_output = pd.merge(df_filename_keys, df_labeled_fs, on='temp_key', how='left').drop(columns='temp_key')
-    df_output = pd.merge(df_dei, df_output, on='edinetCode', how='left')
+    # DEIの情報から、財務諸表の含まれるxbrlファイルの特定
+    if df_dei['GAAP'].unique() == 'Japan GAAP' and df_dei['DocType'].unique() == '第二号の四様式':
+        # docidから経理の状況が含まれるXBRLファイルのリストを取得
+        list_xbrl_fs = glob.glob(path_base + arg_docid + '/XBRL/PublicDoc/0205**.htm')
+    elif df_dei['GAAP'].unique() == 'Japan GAAP' and df_dei['DocType'].unique() == '第四号の三様式':
+        # docidから経理の状況が含まれるXBRLファイルのリストを取得
+        list_xbrl_fs = glob.glob(path_base + arg_docid + '/XBRL/PublicDoc/0104**.htm')
+    elif df_dei['GAAP'].unique() == 'Japan GAAP':
+        # docidから経理の状況が含まれるXBRLファイルのリストを取得
+        list_xbrl_fs = glob.glob(path_base + arg_docid + '/XBRL/PublicDoc/0105**.htm')
+    else:
+        list_xbrl_fs = []
 
-    df_output = make_tidy(df_output)
+    # DFの取得開始
+    if list_xbrl_fs:
+        # ファイル名からキー情報の取得
+        df_filename_keys = get_keys(list_xbrl_fs[0])
+        # 結合用のキー列追加
+        df_filename_keys['temp_key'] = 1
+
+        # 経理の状況が含まれるリストから、各ファイルに対応するDFを作成し、リストに格納
+        list_df_fs = [get_fs(each_xbrl_fs) for each_xbrl_fs in list_xbrl_fs]
+        # 各ファイルごとのDFを縦結合する。
+        df_fs = pd.concat(list_df_fs)
+
+        # docidから独自ラベルを取得する。
+        df_label_local = get_label_local(arg_docid)
+        # 日本語ラベル付きDFを取得する。
+        df_labeled_fs = get_labeled_df(df_fs, df_label_local)
+        # 結合用のキー列追加
+        df_labeled_fs['temp_key'] = 1
+
+        # ファイル名から作成したキー情報と結合
+        df_output = pd.merge(df_filename_keys, df_labeled_fs, on='temp_key', how='left').drop(columns='temp_key')
+        df_output = pd.merge(df_dei, df_output, on='edinetCode', how='left')
+
+        df_output = make_tidy(df_output)
+    else:
+        df_output = pd.DataFrame(index=[])
 
     return df_output
 
 
 
 
+list_docid = os.listdir(path_base)
 
+list_fs = []
+
+for docid in list_docid[0:50]:
+    print(docid)
+    #try:
+    df_fs = get_df_fs(docid)
+    if len(df_fs) > 0:
+        list_fs.append(df_fs)
+    #except:
+    #    pass
+
+list_df_fs=[get_df_fs(docid) for docid in list_docid]
 
 
 
