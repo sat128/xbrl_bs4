@@ -10,7 +10,7 @@ path_base = '****' # baseとなるディレクトリの指定。個々のdocid�
 if path_base[-1] != '/':
     path_base = path_base + '/'
 
-path_taxonomy_labels = '****/taxonomy_label.tsv' # Gitに乗せたtsvファイルをローカルに保存して当該パスを指定してください。
+path_taxonomy_labels = '****/taxonomy_global_label.tsv' # Gitに乗せたtsvファイルをローカルに保存して当該パスを指定してください。
 
 
 def get_keys(arg_docid):
