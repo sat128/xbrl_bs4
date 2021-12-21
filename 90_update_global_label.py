@@ -5,7 +5,7 @@ import pandas as pd
 from bs4 import BeautifulSoup
 
 ########## タクソノミファイルのファイルパスを指定 ##########
-path_taxonomy = 'タクソノミを保存したファイルパスを指定してください'
+path_taxonomy = 'タクソノミのzipファイルを解凍したファイルパスを指定してください。パスの最後に/を忘れないでください'
 
 ########## taxonomy_global_label.tsvが保存されているパスを指定 ##########
 path_global_label = 'taxonomy_global_label.tsvが保存されているファイルパスを指定してください'
