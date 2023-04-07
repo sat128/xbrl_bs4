@@ -293,7 +293,8 @@ def get_labeled_df(arg_fs, arg_label_local):
         # 本来はグローバルラベルに定義がある「jpcrp_cor_ShareholdingRatio」をローカルラベルに含めている会社し、レコード重複の原因となるため、この行を削除
         df_label_local = df_label_local[~df_label_local['label_for_join'].str.contains('jpcrp_cor_ShareholdingRatio')]
         df_label_tmp = pd.concat([df_label_local, df_label_global])
-        df_label_tmp = df_label_tmp[df_label_tmp['xlink_role'].str.contains('/2003/role/label')]
+    # 冗長ラベルを使用する
+    df_label_tmp = df_label_tmp[df_label_tmp['xlink_role'].str.contains('/2003/role/verboseLabel')]
 
     # 必要カラムのみに絞る
     df_label_tmp = df_label_tmp[['xmlns_jpcrp_ymd', 'label_for_join', 'xlink_role', 'label_text']].drop_duplicates()
