@@ -1,11 +1,11 @@
 import os
 import re
-import glob
 import pandas as pd
+from pathlib import Path
 from bs4 import BeautifulSoup
 
 ########## タクソノミファイルのファイルパスを指定 ##########
-path_taxonomy = 'タクソノミのzipファイルを解凍したファイルパスを指定してください。パスの最後に/を忘れないでください'
+path_taxonomy = Path('タクソノミのzipファイルを解凍したファイルパスを指定してください。パスの最後に/を忘れないでください')
 
 ########## taxonomy_global_label.tsvが保存されているパスを指定 ##########
 path_global_label = 'taxonomy_global_label.tsvが保存されているファイルパスを指定してください'
@@ -20,13 +20,10 @@ def get_global_label(arg_path):
     # labファイルの読み込み
     with open(arg_path, encoding='utf-8') as f:
         soup = BeautifulSoup(f.read(), 'lxml')
-
     # link:locタグのみ抽出
     link_loc = soup.find_all('link:loc')
-
     # link:locタグの取得結果をdictにし、dictを格納するカラのリストを作成
     list_locator = []
-
     # link:locタグの情報をループ処理で取得
     for each_loc in link_loc:
         dict_locator = {}
@@ -37,16 +34,12 @@ def get_global_label(arg_path):
         dict_locator['label_for_join'] = each_loc.get('xlink:href').split(sep='#')[1]
         dict_locator['loc_label'] = each_loc.get('xlink:label')
         list_locator.append(dict_locator)
-
-    # link:locタグの取得結果をDFに    
+    # link:locタグの取得結果をDFに
     df_locator = pd.DataFrame(list_locator)
-
     # link:labelArcタグのみ抽出
     link_arc = soup.find_all('link:labelarc')
-
     # link:labelArcタグの取得結果をdictにし、dictを格納するカラのリストを作成
     list_arc = []
-
     # link:labelArcタグの情報をループ処理で取得
     for each_arc in link_arc:
         dict_arc = {}
@@ -54,16 +47,12 @@ def get_global_label(arg_path):
         dict_arc['loc_label'] = each_arc.get('xlink:from')
         dict_arc['xlink_label'] = each_arc.get('xlink:to')
         list_arc.append(dict_arc)
-
-    # link:labelArcタグの取得結果をDFに    
+    # link:labelArcタグの取得結果をDFに
     df_arc = pd.DataFrame(list_arc)
-
     # link:labelタグのみ抽出
     link_label = soup.find_all('link:label')
-
     # link:labelタグの取得結果をdictにし、dictを格納するカラのリストを作成
     list_label = []
-
     # link:labelタグの情報をループ処理で取得
     for each_label in link_label:
         dict_label = {}
@@ -72,17 +61,14 @@ def get_global_label(arg_path):
         dict_label['xml_lang'] = each_label.get('xml:lang')
         dict_label['label_text'] = each_label.text
         list_label.append(dict_label)
-
-    # link:labelタグの取得結果をDFに    
+    # link:labelタグの取得結果をDFに
     df_label = pd.DataFrame(list_label)
-
     # locとarcの結合
     df_merged = pd.merge(df_locator, df_arc, on='loc_label', how='inner')
     # loc, arcとlabelの結合
     df_merged = pd.merge(df_merged, df_label, on='xlink_label', how='inner')
-
     return df_merged
-    
+
 
 # ベースとなるDFの定義
 df_global_label2 = pd.DataFrame(columns=[
@@ -95,9 +81,9 @@ df_global_label2 = pd.DataFrame(columns=[
 list_path_taxonomy = []
 
 # 各labファイルの検索
-list_path_taxonomy.extend(glob.glob(path_taxonomy + '**/jpcrp/**/label/**_lab.xml', recursive=True)) # 日本基準用タクソノミ
-list_path_taxonomy.extend(glob.glob(path_taxonomy + '**/jppfs/**/label/**_lab.xml', recursive=True)) # IFRS用タクソノミ
-list_path_taxonomy.extend(glob.glob(path_taxonomy + '**/jpigp/**/label/**_lab.xml', recursive=True)) # 米国基準用タクソノミ
+list_path_taxonomy.extend([i for i in path_taxonomy.glob('**/*') if re.match(r'.*jpcrp.*_lab\.xml', str(i))])
+list_path_taxonomy.extend([i for i in path_taxonomy.glob('**/*') if re.match(r'.*jppfs.*_lab\.xml', str(i))])
+list_path_taxonomy.extend([i for i in path_taxonomy.glob('**/*') if re.match(r'.*jpigp.*_lab\.xml', str(i))])
 
 list_result_df = []
 
